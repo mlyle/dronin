@@ -113,6 +113,7 @@ bool bl_xfer_read_start(struct xfer_state * xfer, const struct msg_xfer_start *x
 		PIOS_FLASH_get_partition_size(xfer->partition_id, &xfer->partition_size);
 		xfer->original_partition_offset = 0;
 		break;
+#ifndef BL_MINIMAL
 	case DFU_PARTITION_AUTOTUNE:
 		PIOS_FLASH_find_partition_id(FLASH_PARTITION_LABEL_AUTOTUNE, &xfer->partition_id);
 		PIOS_FLASH_get_partition_size(xfer->partition_id, &xfer->partition_size);
@@ -128,6 +129,7 @@ bool bl_xfer_read_start(struct xfer_state * xfer, const struct msg_xfer_start *x
 		PIOS_FLASH_get_partition_size(xfer->partition_id, &xfer->partition_size);
 		xfer->original_partition_offset = 0;
 		break;
+#endif
 	default:
 		return false;
 	}
@@ -202,13 +204,6 @@ bool bl_xfer_write_start(struct xfer_state * xfer, const struct msg_xfer_start *
 	xfer->original_partition_offset = 0;
 
 	switch (xfer_start->label) {
-#ifdef F1_UPGRADER
-	case DFU_PARTITION_BL:
-		PIOS_FLASH_find_partition_id(FLASH_PARTITION_LABEL_BL, &xfer->partition_id);
-		PIOS_FLASH_get_partition_size(xfer->partition_id, &xfer->partition_size);
-		xfer->partition_size  -= bdinfo->desc_size; /* don't allow overwriting descriptor */
-		break;
-#endif
 	case DFU_PARTITION_FW:
 		PIOS_FLASH_find_partition_id(FLASH_PARTITION_LABEL_FW, &xfer->partition_id);
 		PIOS_FLASH_get_partition_size(xfer->partition_id, &xfer->partition_size);
@@ -225,6 +220,7 @@ bool bl_xfer_write_start(struct xfer_state * xfer, const struct msg_xfer_start *
 		PIOS_FLASH_find_partition_id(FLASH_PARTITION_LABEL_SETTINGS, &xfer->partition_id);
 		PIOS_FLASH_get_partition_size(xfer->partition_id, &xfer->partition_size);
 		break;
+#ifndef BL_MINIMAL
 	case DFU_PARTITION_AUTOTUNE:
 		PIOS_FLASH_find_partition_id(FLASH_PARTITION_LABEL_AUTOTUNE, &xfer->partition_id);
 		PIOS_FLASH_get_partition_size(xfer->partition_id, &xfer->partition_size);
@@ -233,10 +229,14 @@ bool bl_xfer_write_start(struct xfer_state * xfer, const struct msg_xfer_start *
 		PIOS_FLASH_find_partition_id(FLASH_PARTITION_LABEL_LOG, &xfer->partition_id);
 		PIOS_FLASH_get_partition_size(xfer->partition_id, &xfer->partition_size);
 		break;
+<<<<<<< HEAD
 	case DFU_PARTITION_LOADABLE_EXTENSION:
 		PIOS_FLASH_find_partition_id(FLASH_PARTITION_LABEL_LOADABLE_EXTENSION, &xfer->partition_id);
 		PIOS_FLASH_get_partition_size(xfer->partition_id, &xfer->partition_size);
 		break;
+=======
+#endif
+>>>>>>> 1a0fdebf20... asdkjasdjkasjk
 	default:
 		return false;
 	}
@@ -316,26 +316,26 @@ bool bl_xfer_wipe_partition(const struct msg_wipe_partition *wipe_partition)
 	enum pios_flash_partition_labels flash_label;
 
 	switch (wipe_partition->label) {
-#ifdef F1_UPGRADER
-	case DFU_PARTITION_BL:
-		flash_label = FLASH_PARTITION_LABEL_BL;
-		break;
-#endif
 	case DFU_PARTITION_FW:
 		flash_label = FLASH_PARTITION_LABEL_FW;
 		break;
 	case DFU_PARTITION_SETTINGS:
 		flash_label = FLASH_PARTITION_LABEL_SETTINGS;
 		break;
+#ifndef BL_MINIMAL
 	case DFU_PARTITION_AUTOTUNE:
 		flash_label = FLASH_PARTITION_LABEL_AUTOTUNE;
 		break;
 	case DFU_PARTITION_LOG:
 		flash_label = FLASH_PARTITION_LABEL_LOG;
 		break;
+<<<<<<< HEAD
 	case DFU_PARTITION_LOADABLE_EXTENSION:
 		flash_label = FLASH_PARTITION_LABEL_LOADABLE_EXTENSION;
 		break;
+=======
+#endif
+>>>>>>> 1a0fdebf20... asdkjasdjkasjk
 	default:
 		return false;
 	}

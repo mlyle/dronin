@@ -39,18 +39,20 @@ uintptr_t pios_com_telem_usb_id;
  */
 void PIOS_Board_Init(void)
 {
-	/* Enable Prefetch Buffer */
-	FLASH_PrefetchBufferCmd(FLASH_PrefetchBuffer_Enable);
-
-	/* Flash 2 wait state */
-	FLASH_SetLatency(FLASH_Latency_2);
-
 	/* Delay system */
 	PIOS_DELAY_Init();
 
 #if defined(PIOS_INCLUDE_ANNUNC)
  	PIOS_ANNUNC_Init(&pios_annunc_cfg);
 #endif	/* PIOS_INCLUDE_ANNUNC */
+
+#if defined(PIOS_INCLUDE_FLASH)
+	/* Inititialize all flash drivers */
+	PIOS_Flash_Internal_Init(&pios_internal_flash_id, &flash_internal_cfg);
+
+	/* Register the partition table */
+	PIOS_FLASH_register_partition_table(pios_flash_partition_table, NELEMENTS(pios_flash_partition_table));
+#endif	/* PIOS_INCLUDE_FLASH */
 
 #if defined(PIOS_INCLUDE_USB)
 	/* Initialize board specific USB data */
@@ -74,8 +76,6 @@ void PIOS_Board_Init(void)
 #endif	/* PIOS_INCLUDE_USB_HID && PIOS_INCLUDE_COM_MSG */
 
 #endif	/* PIOS_INCLUDE_USB */
-
-	RCC_AHBPeriphClockCmd(RCC_AHBPeriph_CRC, ENABLE);//TODO Tirar
 }
 
 /**

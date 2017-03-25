@@ -31,17 +31,18 @@
 #define PIOS_CONFIG_H
 #define PIOS_INCLUDE_BL_HELPER
 #define PIOS_INCLUDE_BL_HELPER_WRITE_SUPPORT
+
 /* Enable/Disable PiOS Modules */
 #define PIOS_INCLUDE_ANNUNC
+#define PIOS_INCLUDE_FLASH
+#define PIOS_INCLUDE_FLASH_INTERNAL
 #define PIOS_INCLUDE_SYS
 #define PIOS_INCLUDE_USB
 #define PIOS_INCLUDE_USB_HID
 #define PIOS_INCLUDE_COM_MSG
 #define PIOS_INCLUDE_IAP
 
-/* Defaults for Logging */
-#define LOG_FILENAME 			"PIOS.LOG"
-#define STARTUP_LOG_ENABLED		1
+#define BL_MINIMAL
 
 #endif /* PIOS_CONFIG_H */
 

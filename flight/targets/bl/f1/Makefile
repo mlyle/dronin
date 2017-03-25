@@ -3,12 +3,12 @@
 # @author     The OpenPilot Team, http://www.openpilot.org, Copyright (C) 2009.
 # @author     Tau Labs, http://taulabs.org, Copyright (C) 2012-2013
 # @author     dRonin, http://dRonin.org/, Copyright (C) 2016
-# 
+#
 # @addtogroup 
 # @{
 # @addtogroup 
 # @{
-# @brief Makefile to build bootloader for STM32F1 boards
+# @brief Makefile to build bootupgrader for STM32F1 boards
 ###############################################################################
 #
 # This program is free software; you can redistribute it and/or modify
@@ -35,108 +35,73 @@ include $(MAKE_INC_DIR)/firmware-defs.mk
 
 # Paths
 PIOSINC = $(PIOS)/inc
-PIOSSTM32F10X = $(PIOS)/STM32F10x
 PIOSCOMMON = $(PIOS)/Common
 PIOSCOMMONLIB = $(PIOSCOMMON)/Libraries
 FLIGHTLIBINC = $(FLIGHTLIB)/inc
-APPLIBDIR = $(PIOSSTM32F10X)/Libraries
-STMLIBDIR = $(APPLIBDIR)
-STMSPDDIR = $(STMLIBDIR)/STM32F10x_StdPeriph_Driver
-STMUSBDIR = $(STMLIBDIR)/STM32_USB-FS-Device_Driver
-STMSPDSRCDIR = $(STMSPDDIR)/src
-STMSPDINCDIR = $(STMSPDDIR)/inc
-STMUSBSRCDIR = $(STMUSBDIR)/src
-STMUSBINCDIR = $(STMUSBDIR)/inc
-CMSISDIR  = $(STMLIBDIR)/CMSIS/Core/CM3
 
 # List C source files here. (C dependencies are automatically generated.)
 # use file-extension c for "c-only"-files
 
 ## Bootloader (architecture specific)
-SRC += $(BLARCHDIR)/main.c
-SRC += $(BLARCHDIR)/op_dfu.c
+SRC += $(BLCOMMONDIR)/main.c
+SRC += $(BLCOMMONDIR)/led_pwm.c
+SRC += $(BLCOMMONDIR)/bl_xfer.c
 
 ## Bootloader (board specific implementations)
 SRC += $(BLBOARDDIR)/pios_board.c
 SRC += $(PIOS)/STM32/pios_usb_board_data.c
 
-## PIOS Hardware (STM32F10x)
-SRC += pios_sys.c
-SRC += pios_annunc.c
-SRC += pios_iap.c
+PIOS_DEVLIB			:=	$(PIOS)/STM32F10x
+include $(PIOS_DEVLIB)/library.mk
 SRC += pios_bl_helper.c
-
-## PIOS Hardware (USB)
+SRC += pios_exti.c
+SRC += pios_flash_internal.c
+SRC += pios_gpio.c
+SRC += pios_iap.c
+SRC += pios_annunc.c
+SRC += pios_rtc.c
+SRC += pios_sys.c
+SRC += pios_tim.c
 SRC += pios_usb.c
-SRC += pios_usbhook.c
+SRC += pios_usb_cdc.c
 SRC += pios_usb_hid.c
 SRC += pios_usb_hid_istr.c
 SRC += pios_usb_hid_pwr.c
+SRC += pios_usbhook.c
+ASRC = $(PIOS_DEVLIB)/startup_stm32f10x_$(MODEL)$(MODEL_SUFFIX).S
+
+LINKER_SCRIPTS_BL = $(PIOS_DEVLIB)/link_STM32103CB_PIPXTREME_memory.ld
+LINKER_SCRIPTS_BL += $(PIOS_DEVLIB)/link_STM32103CB_PIPXTREME_BL_sections.ld
 
 ## PIOS Hardware (Common)
 SRC += pios_delay.c
 SRC += pios_board_info.c
 SRC += pios_com_msg.c
-SRC += printf-stdarg.c
 SRC += pios_usb_desc_hid_only.c
 SRC += pios_usb_util.c
+SRC += pios_flash.c
 SRC += pios_heap.c
 SRC += pios_semaphore.c
+SRC += pios_spi.c
 SRC += pios_irq.c
-
-## CMSIS for STM32
-include $(PIOSCOMMONLIB)/CMSIS/library.mk
-SRC += $(BOARD_INFO_DIR)/cmsis_system.c
-
-## Used parts of the STM-Library
-SRC += $(STMSPDSRCDIR)/stm32f10x_bkp.c
-SRC += $(STMSPDSRCDIR)/stm32f10x_crc.c
-SRC += $(STMSPDSRCDIR)/stm32f10x_flash.c
-SRC += $(STMSPDSRCDIR)/stm32f10x_gpio.c
-SRC += $(STMSPDSRCDIR)/stm32f10x_pwr.c
-SRC += $(STMSPDSRCDIR)/stm32f10x_rcc.c
-SRC += $(STMSPDSRCDIR)/stm32f10x_rtc.c
-SRC += $(STMSPDSRCDIR)/stm32f10x_spi.c
-SRC += $(STMSPDSRCDIR)/stm32f10x_dbgmcu.c
-SRC += $(STMSPDSRCDIR)/misc.c
-
-## STM32 USB Library
-SRC += $(STMUSBSRCDIR)/usb_core.c
-SRC += $(STMUSBSRCDIR)/usb_init.c
-SRC += $(STMUSBSRCDIR)/usb_int.c
-SRC += $(STMUSBSRCDIR)/usb_mem.c
-SRC += $(STMUSBSRCDIR)/usb_regs.c
-SRC += $(STMUSBSRCDIR)/usb_sil.c
-
-# List Assembler source files here.
-# Make them always end in a capital .S. Files ending in a lowercase .s
-# will not be considered source files but generated files (assembler
-# output from the compiler), and will be deleted upon "make clean"!
-# Even though the DOS/Win* filesystem matches both .s and .S the same,
-# it will preserve the spelling of the filenames, and gcc itself does
-# care about how the name is spelled on its command-line.
-ASRC = $(PIOSSTM32F10X)/startup_stm32f10x_$(MODEL)$(MODEL_SUFFIX).S
+SRC += pios_wdg.c
 
 # List any extra directories to look for include files here.
 #    Each directory must be seperated by a space.
 EXTRAINCDIRS  += $(PIOS)
 EXTRAINCDIRS  += $(PIOSINC)
 EXTRAINCDIRS  += $(FLIGHTLIBINC)
-EXTRAINCDIRS  += $(PIOSSTM32F10X)/inc
 EXTRAINCDIRS  += $(STMSPDINCDIR)
 EXTRAINCDIRS  += $(STMUSBINCDIR)
 EXTRAINCDIRS  += $(CMSISDIR)
+EXTRAINCDIRS  += $(BOARD_INFO_DIR)
 EXTRAINCDIRS  += $(BLBOARDDIR)
 EXTRAINCDIRS  += $(BLARCHDIR)
 EXTRAINCDIRS  += $(BLCOMMONDIR)
 
-# Path to Linker-Scripts
-LINKERSCRIPTPATH = $(PIOSSTM32F10X)
-
 # Place project-specific -D (define) and/or 
 # -U options for C here.
-CDEFS = -DSTM32F10X_$(MODEL)
-CDEFS += -DUSE_STDPERIPH_DRIVER
+CDEFS += -DSYSCLK_FREQ=$(SYSCLK_FREQ)
 CDEFS += -DUSE_$(BOARD)
 
 # Provide (only) the bootloader with board-specific defines
@@ -167,10 +132,11 @@ ADEFS = -D__ASSEMBLY__
 #    -adhlns...: create assembler listing
 #
 # Flags for C and C++ (arm-elf-gcc/arm-elf-g++)
+#CFLAGS += -D$(STM32_TYPE)
 
 CFLAGS += -gdwarf-2
 CFLAGS += -Os -fconserve-stack
-CFLAGS += -ffunction-sections
+CFLAGS += -fdata-sections -ffunction-sections
 
 CFLAGS += -mcpu=$(MCU)
 CFLAGS += $(CDEFS)
@@ -185,8 +151,6 @@ CFLAGS += -Werror
 CFLAGS += -Wa,-adhlns=$(addprefix $(OUTDIR)/, $(notdir $(addsuffix .lst, $(basename $<))))
 # Compiler flags to generate dependency files:
 CFLAGS += -MD -MP -MF $(OUTDIR)/dep/$(@F).d
-
-CFLAGS += -DBOOTLOADER
 
 # flags only for C
 CONLYFLAGS += -std=gnu99
@@ -209,9 +173,8 @@ LDFLAGS += -lc_nano -lgcc
 LDFLAGS += -Wl,--warn-common
 LDFLAGS += -Wl,--fatal-warnings
 
-# Set linker-script name depending on selected submodel name
-LDFLAGS += -T$(LINKERSCRIPTPATH)/link_$(BOARD)_memory.ld
-LDFLAGS += -T$(LINKERSCRIPTPATH)/link_$(BOARD)_BL_sections.ld
+# Linker scripts
+LDFLAGS += $(addprefix -T,$(LINKER_SCRIPTS_BL))
 
 # List of all source files.
 ALLSRC     = $(ASRC) $(SRC)
@@ -254,6 +217,19 @@ $(shell md $(subst /,\\,$(OUTDIR)) 2>NUL)
 else
 $(shell mkdir -p $(OUTDIR) 2>/dev/null)
 endif
+
+# Allows the bin to be padded up to the firmware description blob base
+# Required for boards which don't use the TL bootloader to put
+# the blob at the correct location
+ifdef PAD_TLFW_FW_DESC
+FW_DESC_BASE := $(shell echo $$(($(FW_BANK_BASE)+$(FW_BANK_SIZE)-$(FW_DESC_SIZE))))
+else
+FW_DESC_BASE = 0
+endif
+
+$(eval $(call TLFW_TEMPLATE,$(OUTDIR)/$(TARGET).bin,$(BOARD_TYPE),$(BOARD_REVISION),$(FW_DESC_BASE)))
+
+tlfw: $(OUTDIR)/$(TARGET).tlfw
 
 # Include the dependency files.
 ifdef ComSpec

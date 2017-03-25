@@ -200,13 +200,8 @@ const static struct bl_transition bl_transitions[BL_STATE_NUM_STATES] = {
 			[BL_EVENT_WRITE_START]      = BL_STATE_DFU_WRITE_IN_PROGRESS,
 			[BL_EVENT_ABORT_OPERATION]  = BL_STATE_DFU_IDLE,
 			[BL_EVENT_USB_CONNECTED]    = BL_STATE_DFU_IDLE,
-#ifdef F1_UPGRADER
-			[BL_EVENT_JUMP_TO_APP]      = BL_STATE_DFU_IDLE,
-			[BL_EVENT_USB_DISCONNECTED] = BL_STATE_DFU_IDLE,
-#else
 			[BL_EVENT_JUMP_TO_APP]      = BL_STATE_JUMPING_TO_APP,
 			[BL_EVENT_USB_DISCONNECTED] = BL_STATE_JUMPING_TO_APP,
-#endif
 		},
 	},
 	[BL_STATE_DFU_READ_IN_PROGRESS] = {
@@ -459,10 +454,6 @@ int main(void)
 	/* Check if the user has requested that we boot into DFU mode */
 	PIOS_IAP_Init();
 
-#ifdef F1_UPGRADER
-	PIOS_IAP_ClearRequest();
-	bl_fsm_inject_event(&bl_fsm_context, BL_EVENT_ENTER_DFU);
-#else
 	if (PIOS_IAP_CheckRequest() == true) {
 		/* User has requested that we boot into DFU mode */
 		PIOS_IAP_ClearRequest();
@@ -473,7 +464,6 @@ int main(void)
 		PIOS_DELAY_WaitmS(1000);//needed so OS can detect FW USB disconnect
 		bl_fsm_inject_event(&bl_fsm_context, BL_EVENT_FORCE_BOOT);
 	}
-#endif
 
 	/* Assume no USB connected */
 	bool usb_connected = false;

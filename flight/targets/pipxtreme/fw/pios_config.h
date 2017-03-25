@@ -64,10 +64,6 @@
 #define PIOS_INCLUDE_FLASH_INTERNAL
 #define PIOS_INCLUDE_LOGFS_SETTINGS
 
-/* Defaults for Logging */
-#define LOG_FILENAME 			"PIOS.LOG"
-#define STARTUP_LOG_ENABLED		1
-
 /* COM Module */
 #define GPS_BAUDRATE			19200
 #define TELEM_BAUDRATE			19200

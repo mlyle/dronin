@@ -27,7 +27,10 @@
 #define BL_MESSAGES_H_
 
 #include <stdint.h>		/* uint*_t */
+
+#ifndef BL_MINIMAL
 #define BL_INCLUDE_CAP_EXTENSIONS
+#endif
 
 /* Note:
  *   Writes are from PC -> FC
