@@ -325,7 +325,7 @@ CFLAGS += -fomit-frame-pointer
 CFLAGS += -ffunction-sections -fdata-sections
 CFLAGS += -Wdouble-promotion
 
-CFLAGS += -Wall
+CFLAGS += -Wall -fstack-usage
 CFLAGS += -Werror
 CFLAGS += -Wa,-adhlns=$(addprefix $(OUTDIR)/, $(notdir $(addsuffix .lst, $(basename $<))))
 # Compiler flags to generate dependency files:
