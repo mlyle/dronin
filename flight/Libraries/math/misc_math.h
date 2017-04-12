@@ -220,6 +220,149 @@ static inline void matrix_transpose(const float *a, float *out, int arows,
 	}
 }
 
+#define TOL_EPS 0.0001f
+static inline bool matrix_pseudoinv_convergecheck(const float *prod, int size)
+{
+	const float *pos = prod;
+
+	for (int i = 0; i < size; i++) {
+		float sum = 0.0f;
+
+		for (int j = 0; j < size; j++) {
+			sum += *pos;
+
+			pos++;
+		}
+
+		/* It needs to be near 1 or 0 for us to be converged.
+		 * First, return false if outside 0..1
+		 */
+		if (sum > (1 + TOL_EPS)) {
+			return false;
+		}
+
+		if (sum < (0 - TOL_EPS)) {
+			return false;
+		}
+
+		/* Next, continue if very close to 1 or 0 */
+		if (sum > (1 - TOL_EPS)) {
+			continue;
+		}
+
+		if (sum < (0 + TOL_EPS)) {
+			continue;
+		}
+
+		/* We're between 0 and 1, outside of the tolerance */
+		return false;
+	}
+
+	for (int i = 0; i < size; i++) {
+		float sum = 0.0f;
+
+		pos = prod + i;
+
+		for (int j = 0; j < size; j++) {
+			sum += *pos;
+
+			pos += size;
+		}
+
+		/* It needs to be near 1 or 0 for us to be converged.
+		 * First, return false if outside 0..1
+		 */
+		if (sum > (1 + TOL_EPS)) {
+			return false;
+		}
+
+		if (sum < (0 - TOL_EPS)) {
+			return false;
+		}
+
+		/* Next, continue if very close to 1 or 0 */
+		if (sum > (1 - TOL_EPS)) {
+			continue;
+		}
+
+		if (sum < (0 + TOL_EPS)) {
+			continue;
+		}
+
+		/* We're between 0 and 1, outside of the tolerance */
+		return false;
+	}
+
+	return true;
+}
+
+static inline bool matrix_pseudoinv_step(const float *a, float *ainv,
+		int arows, int acols)
+{
+	float prod[acols * acols];
+	float invcheck[acols * arows];
+
+	/* Calculate 2 * ainv - ainv * a * ainv */
+
+	/* prod = ainv * a */
+	matrix_mul(ainv, a, prod, acols, arows, acols);
+
+	/* Convergence check: rows should add to 0 or 1 */
+	if (matrix_pseudoinv_convergecheck(prod, acols)) {
+		return true;
+	}
+
+	/* invcheck = prod * ainv */
+	matrix_mul(prod, ainv, invcheck, acols, acols, arows);
+
+	/* ainv_ = 2 * ainv */
+	matrix_mul_scalar(ainv, 2, ainv, acols, arows);
+
+	/* ainv__ = ainv_ - invcheck */
+	/* AKA expanded ainv__ = 2 * ainv - ainv * a * ainv */
+	matrix_sub(ainv, invcheck, ainv, acols, arows);
+
+	return false;
+}
+
+static inline float matrix_getmaxabs(const float *a, int arows, int acols)
+{
+	float mx = 0.0f;
+
+	const int size = arows * acols;
+
+	for (int i = 0; i < size; i ++) {
+		float val = fabsf(a[i]);
+
+		if (val > mx) {
+			mx = val;
+		}
+	}
+
+	return mx;
+}
+
+static inline bool matrix_pseudoinv(const float *a, float *out,
+		int arows, int acols)
+{
+	matrix_transpose(a, out, arows, acols);
+
+	float scale = matrix_getmaxabs(a, arows, acols);
+
+	matrix_mul_scalar(out, 0.01f / scale, out, acols, arows);
+
+	for (int i = 0; i < 6000; i++) {
+		if (matrix_pseudoinv_step(a, out, arows, acols)) {
+			/* Do one more step when we look pretty good! */
+			matrix_pseudoinv_step(a, out, arows, acols);
+
+			return true;
+		}
+	}
+
+	return false;
+}
+
 #define matrix_mul_check(a, b, out, arows, acolsbrows, bcols) \
 	do { \
 		/* Note the dimensions each get used multiple times */	\

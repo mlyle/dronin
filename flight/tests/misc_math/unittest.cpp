@@ -362,8 +362,10 @@ protected:
   }
 };
 
-TEST_F(MatrixMath, Multiplies) {
+TEST_F(MatrixMath, MultipliesAndInverses) {
   const float eps = 0.000001f;
+  const float bigeps = 0.001f;
+  const float hugeeps = 0.005f;
   const float trivial[] = {
     2.0f
   };
@@ -390,6 +392,13 @@ TEST_F(MatrixMath, Multiplies) {
     3.0f, 4.0f, 5.0f, 6.0f
   };
 
+  const float pseudo_4x3[] = {
+    -0.75f    , -0.1f     ,  0.55f,
+    -0.333333f, -0.033333f,  0.266667f,
+     0.083333f,  0.033333f, -0.016667f,
+     0.5f     ,  0.1f     , -0.3f
+  };
+
   const float simple_4x4[] = {
      1.0f,  1.0f,  1.0f, 1.0f,
     -1.0f, -1.0f,  1.0f, 1.0f,
@@ -397,11 +406,22 @@ TEST_F(MatrixMath, Multiplies) {
     -1.0f,  1.0f, -1.0f, 1.0f,
   };
 
+  const float degen_5x3[] = {
+     0, 1, 1, 1, 1,
+    -1, 0, 0, 0, 0,
+    -1, 0, 0, 0, 0
+  };
 
   float single[1];
   float vect3[3];
   float matr_3x3[3*3];
   float matr_3x4[3*4];
+  float matr_4x3[4*3];
+  float matr_4x4[4*4];
+  float matrb_4x4[4*4];
+
+  float matr_5x3[5*3];
+  float matr_3x5[3*5];
 
   matrix_mul_check(trivial, trivial, single, 1, 1, 1);
 
@@ -448,4 +468,152 @@ TEST_F(MatrixMath, Multiplies) {
   EXPECT_NEAR(14, matr_3x4[7], eps);
   EXPECT_NEAR(18, matr_3x4[11], eps);
 
-} 
+  EXPECT_TRUE(matrix_pseudoinv(trivial, single, 1, 1));
+
+  EXPECT_NEAR(1.0f / trivial[0], single[0], bigeps);
+
+  EXPECT_TRUE(matrix_pseudoinv(identity_3x3, matr_3x3, 1, 1));
+
+  for (int i = 0; i < 9; i++) {
+    EXPECT_NEAR(identity_3x3[i], matr_3x3[i], bigeps);
+  }
+
+  EXPECT_TRUE(matrix_pseudoinv(simple_4x4, matr_4x4, 4, 4));
+
+  /* Check for values near +/- 0.25f */
+  for (int i = 0; i < 16; i++) {
+    EXPECT_NEAR(0.25f, fabsf(matr_4x4[i]), bigeps);
+  }
+
+  matrix_mul_check(simple_4x4, matr_4x4, matrb_4x4, 4, 4, 4);
+
+  for (int i = 0; i < 4; i++) {
+    for (int j = 0; j < 4; j++) {
+      if (i == j) {
+        EXPECT_NEAR(1, matrb_4x4[i*4 + j], bigeps);
+      } else {
+        EXPECT_NEAR(0, matrb_4x4[i*4 + j], bigeps);
+      }
+    }
+  }
+
+  EXPECT_TRUE(matrix_pseudoinv(matr_4x4, matrb_4x4, 4, 4));
+
+  for (int i = 0; i < 16; i++) {
+    EXPECT_NEAR(matrb_4x4[i], simple_4x4[i], bigeps);
+  }
+
+  EXPECT_TRUE(matrix_pseudoinv(simple_3x4, matr_4x3, 3, 4));
+
+  for (int i = 0; i < 12; i++) {
+    EXPECT_NEAR(matr_4x3[i], pseudo_4x3[i], bigeps);
+  }
+
+  EXPECT_TRUE(matrix_pseudoinv(matr_4x3, matr_3x4, 4, 3));
+
+  for (int i = 0; i < 12; i++) {
+    EXPECT_NEAR(matr_3x4[i], simple_3x4[i], hugeeps);
+  }
+
+  EXPECT_TRUE(matrix_pseudoinv(pseudo_4x3, matr_3x4, 4, 3));
+
+  for (int i = 0; i < 12; i++) {
+    EXPECT_NEAR(matr_4x3[i], pseudo_4x3[i], bigeps);
+  }
+
+  EXPECT_TRUE(matrix_pseudoinv(degen_5x3, matr_3x5, 5, 3));
+  EXPECT_TRUE(matrix_pseudoinv(matr_3x5, matr_5x3, 3, 5));
+
+  for (int i = 0; i < 15; i++) {
+    EXPECT_NEAR(matr_5x3[i], degen_5x3[i], hugeeps);
+  }
+}
+
+TEST_F(MatrixMath, PseudoRandomInverses) {
+  const float eps = 0.0005f;
+
+  // LCG
+  uint64_t attempt = 0;
+
+  const int rows = 10;
+  const int cols = 8;
+
+  for (int idx = 0; idx < 100; idx++) {
+    float matr[rows*cols] = { 0 };
+
+    for (int row = 0; row < rows; row++) {
+      attempt *= 6364136223846793005;
+      attempt += 1442695040888963407;
+
+      // Occasionally generate null rows
+      if (attempt & 0x8000)
+        continue;
+
+      uint64_t fill_row = attempt;
+
+      for (int col = 0; col < cols; col++) {
+        matr[row * cols + col] = ((fill_row & 0xff) - 128.0f) / 128.0f;
+
+        fill_row >>= 8;
+      }
+
+      float invr[cols*rows];
+
+      EXPECT_TRUE(matrix_pseudoinv(matr, invr, rows, cols));
+
+      float invr2[rows*cols];
+
+      float pseudoid[rows*rows];
+
+      matrix_mul_check(matr, invr, pseudoid, rows, cols, rows);
+
+      matrix_mul_check(pseudoid, matr, invr2, rows, rows, cols);
+
+      for (int i = 0; i < cols * rows; i++) {
+        EXPECT_NEAR(invr2[i], matr[i], eps);
+      }
+    }
+
+    uint64_t col_nuke = attempt;
+
+    for (int nukes = 0 ; nukes < 2; nukes++) {
+      int to_nuke = col_nuke % (cols - 1);
+      col_nuke /= cols-1;
+
+      int nuke_val = 0;
+
+      if (col_nuke % 2) {
+        nuke_val = 1;
+      }
+
+      for (int i = 0; i < rows; i++) {
+        matr[i * cols + to_nuke] = nuke_val;
+      }
+
+      float invr[cols*rows];
+
+      EXPECT_TRUE(matrix_pseudoinv(matr, invr, rows, cols));
+
+      float invr2[rows*cols];
+      float pseudoid[rows*rows];
+
+      matrix_mul_check(matr, invr, pseudoid, rows, cols, rows);
+
+      matrix_mul_check(pseudoid, matr, invr2, rows, rows, cols);
+
+      for (int i = 0; i < cols * rows; i++) {
+        EXPECT_NEAR(invr2[i], matr[i], eps);
+      }
+    }
+
+    if (idx == 69) {
+	    for (int i = 0; i < rows; i++) {
+		    for (int j = 0; j < cols; j++) {
+			    printf("%f  ", matr[i*cols + j]);
+		    }
+
+		    printf("\n");
+	    }
+    }
+  }
+}
