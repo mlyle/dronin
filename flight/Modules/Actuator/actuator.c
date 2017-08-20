@@ -95,6 +95,7 @@ static MixerSettingsMixer1TypeOptions types_mixer[MAX_MIX_ACTUATORS];
  */
 
 static float motor_mixer[MAX_MIX_ACTUATORS * MIXERSETTINGS_MIXER1VECTOR_NUMELEM];
+static float motor_mixer_inv[MAX_MIX_ACTUATORS * MIXERSETTINGS_MIXER1VECTOR_NUMELEM];
 
 /* These are various settings objects used throughout the actuator code */
 static ActuatorSettingsData actuatorSettings;
@@ -293,6 +294,12 @@ static void compute_mixer()
 #if MAX_MIX_ACTUATORS > 9
 	compute_one_token_paste(10);
 #endif
+}
+
+static bool compute_inverse_mixer()
+{
+	return matrix_pseudoinv(motor_mixer, motor_mixer_inv,
+		MAX_MIX_ACTUATORS, MIXERSETTINGS_MIXER1VECTOR_NUMELEM);
 }
 
 static void fill_desired_vector(
@@ -587,21 +594,28 @@ static void actuator_task(void* parameters)
 					actuatorSettings.ChannelMin);
 		}
 
+		PIOS_WDG_UpdateFlag(PIOS_WDG_ACTUATOR);
+
+		UAVObjEvent ev;
+
 		if (mixer_settings_updated) {
 			mixer_settings_updated = false;
 			SystemSettingsAirframeTypeGet(&airframe_type);
 
 			compute_mixer();
-			// XXX compute_inverse_mixer();
+
+			/* If we can't calculate a proper inverse mixer,
+			 * set failsafe.
+			 */
+			if (compute_inverse_mixer()) {
+				set_failsafe();
+				continue;
+			}
 
 			MixerSettingsThrottleCurve1Get(curve1);
 			MixerSettingsThrottleCurve2Get(curve2);
 			MixerSettingsCurve2SourceGet(&curve2_src);
 		}
-
-		PIOS_WDG_UpdateFlag(PIOS_WDG_ACTUATOR);
-
-		UAVObjEvent ev;
 
 		// Wait until the ActuatorDesired object is updated
 		if (!PIOS_Queue_Receive(queue, &ev, FAILSAFE_TIMEOUT_MS)) {
