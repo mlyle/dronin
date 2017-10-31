@@ -36,7 +36,6 @@
 
 #include "pios_semaphore.h"
 #include "pios_thread.h"
-#include "pios_queue.h"
 
 /* Private constants */
 #define HMC5883_TASK_PRIORITY        PIOS_THREAD_PRIO_HIGHEST
@@ -53,8 +52,7 @@ enum pios_hmc5883_dev_magic {
 struct hmc5883_dev {
 	pios_i2c_t i2c_id;
 	const struct pios_hmc5883_cfg *cfg;
-	struct pios_queue *queue;
-	struct pios_thread *task;
+	int sample_delay;
 	struct pios_semaphore *data_ready_sema;
 	enum pios_hmc5883_dev_magic magic;
 	enum pios_hmc5883_orientation orientation;
@@ -64,7 +62,8 @@ struct hmc5883_dev {
 static int32_t PIOS_HMC5883_Config(const struct pios_hmc5883_cfg * cfg);
 static int32_t PIOS_HMC5883_Read(uint8_t address, uint8_t * buffer, uint8_t len);
 static int32_t PIOS_HMC5883_Write(uint8_t address, uint8_t buffer);
-static void PIOS_HMC5883_Task(void *parameters);
+static bool PIOS_HMC5883_Callback(void *ctx, void *output,
+		int ms_to_wait, int *next_call);
 
 static struct hmc5883_dev *dev;
 
@@ -79,12 +78,6 @@ static struct hmc5883_dev * PIOS_HMC5883_alloc(void)
 	if (!hmc5883_dev) return (NULL);
 	
 	hmc5883_dev->magic = PIOS_HMC5883_DEV_MAGIC;
-	
-	hmc5883_dev->queue = PIOS_Queue_Create(PIOS_HMC5883_MAX_DOWNSAMPLE, sizeof(struct pios_sensor_mag_data));
-	if (hmc5883_dev->queue == NULL) {
-		PIOS_free(hmc5883_dev);
-		return NULL;
-	}
 
 	return hmc5883_dev;
 }
@@ -125,8 +118,7 @@ int32_t PIOS_HMC5883_Init(pios_i2c_t i2c_id, const struct pios_hmc5883_cfg *cfg)
 
 		dev->data_ready_sema = PIOS_Semaphore_Create();
 		PIOS_Assert(dev->data_ready_sema != NULL);
-	}
-	else {
+	} else {
 		dev->data_ready_sema = NULL;
 	}
 #endif
@@ -134,11 +126,33 @@ int32_t PIOS_HMC5883_Init(pios_i2c_t i2c_id, const struct pios_hmc5883_cfg *cfg)
 	if (PIOS_HMC5883_Config(cfg) != 0)
 		return -2;
 
-	PIOS_SENSORS_Register(PIOS_SENSOR_MAG, dev->queue);
+	switch (dev->cfg->M_ODR) {
+	case PIOS_HMC5883_ODR_0_75:
+		dev->sample_delay = 1000 / 0.75f + 0.99999f;
+		break;
+	case PIOS_HMC5883_ODR_1_5:
+		dev->sample_delay = 1000 / 1.5f + 0.99999f;
+		break;
+	case PIOS_HMC5883_ODR_3:
+		dev->sample_delay = 1000 / 3.0f + 0.99999f;
+		break;
+	case PIOS_HMC5883_ODR_7_5:
+		dev->sample_delay = 1000 / 7.5f + 0.99999f;
+		break;
+	case PIOS_HMC5883_ODR_15:
+		dev->sample_delay = 1000 / 15.0f + 0.99999f;
+		break;
+	case PIOS_HMC5883_ODR_30:
+		dev->sample_delay = 1000 / 30.0f + 0.99999f;
+		break;
+	case PIOS_HMC5883_ODR_75:
+	default:
+		dev->sample_delay = 1000 / 75.0f + 0.99999f;
+		break;
+	}
 
-	dev->task = PIOS_Thread_Create(PIOS_HMC5883_Task, "pios_hmc5883", HMC5883_TASK_STACK_BYTES, NULL, HMC5883_TASK_PRIORITY);
-
-	PIOS_Assert(dev->task != NULL);
+	PIOS_SENSORS_RegisterCallback(PIOS_SENSOR_MAG,
+			PIOS_HMC5883_Callback, dev);
 
 	return 0;
 }
@@ -482,57 +496,28 @@ bool PIOS_HMC5883_IRQHandler(void)
 #endif
 
 /**
- * The HMC5883 task
+ * The HMC5883 callback
  */
-static void PIOS_HMC5883_Task(void *parameters)
+static bool PIOS_HMC5883_Callback(void *ctx, void *output,
+		int ms_to_wait, int *next_call)
 {
-	while (PIOS_HMC5883_Validate(dev) != 0) {
-		PIOS_Thread_Sleep(100);
-	}
+	PIOS_Assert(!PIOS_HMC5883_Validate(dev));
 
-	uint32_t sample_delay;
+	if ((dev->data_ready_sema != NULL) && (dev->cfg->Mode == PIOS_HMC5883_MODE_CONTINUOUS)) {
+		*next_call = 0;
 
-	switch (dev->cfg->M_ODR) {
-	case PIOS_HMC5883_ODR_0_75:
-		sample_delay = 1000 / 0.75f + 0.99999f;
-		break;
-	case PIOS_HMC5883_ODR_1_5:
-		sample_delay = 1000 / 1.5f + 0.99999f;
-		break;
-	case PIOS_HMC5883_ODR_3:
-		sample_delay = 1000 / 3.0f + 0.99999f;
-		break;
-	case PIOS_HMC5883_ODR_7_5:
-		sample_delay = 1000 / 7.5f + 0.99999f;
-		break;
-	case PIOS_HMC5883_ODR_15:
-		sample_delay = 1000 / 15.0f + 0.99999f;
-		break;
-	case PIOS_HMC5883_ODR_30:
-		sample_delay = 1000 / 30.0f + 0.99999f;
-		break;
-	case PIOS_HMC5883_ODR_75:
-	default:
-		sample_delay = 1000 / 75.0f + 0.99999f;
-		break;
-	}
-
-	uint32_t now = PIOS_Thread_Systime();
-
-	while (1) {
-		if ((dev->data_ready_sema != NULL) && (dev->cfg->Mode == PIOS_HMC5883_MODE_CONTINUOUS)) {
-			if (PIOS_Semaphore_Take(dev->data_ready_sema, PIOS_SEMAPHORE_TIMEOUT_MAX) != true) {
-				PIOS_Thread_Sleep(100);
-				continue;
-			}
-		} else {
-			PIOS_Thread_Sleep_Until(&now, sample_delay);
+		if (PIOS_Semaphore_Take(dev->data_ready_sema, ms_to_wait) != true) {
+			return false;
 		}
-
-		struct pios_sensor_mag_data mag_data;
-		if (PIOS_HMC5883_ReadMag(&mag_data) == 0)
-			PIOS_Queue_Send(dev->queue, &mag_data, 0);
+	} else {
+		*next_call = dev->sample_delay;
 	}
+
+	struct pios_sensor_mag_data *mag_data = output;
+	if (PIOS_HMC5883_ReadMag(mag_data) != 0)
+		return false;
+
+	return true;
 }
 
 #endif /* PIOS_INCLUDE_HMC5883 */
