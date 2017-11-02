@@ -40,6 +40,8 @@
 #include "physical_constants.h"
 #include "pios_thread.h"
 
+#ifdef PIOS_INCLUDE_SIMSENSORS
+
 #include "accels.h"
 #include "actuatordesired.h"
 #include "airspeedactual.h"
@@ -80,14 +82,16 @@ static int sens_rate = 500;
 
 enum sensor_sim_type {MODEL_YASIM, MODEL_QUADCOPTER, MODEL_AIRPLANE, MODEL_CAR} sensor_sim_type;
 
+#ifdef PIOS_INCLUDE_SIMSENSORS_YASIM
 extern bool use_yasim;
+static void simulateYasim();
+#endif
 
 // Private functions
 static void SensorsTask(void *parameters);
 static void simulateModelQuadcopter();
 static void simulateModelAirplane();
 static void simulateModelCar();
-static void simulateYasim();
 
 static void magOffsetEstimation(MagnetometerData *mag);
 
@@ -119,9 +123,11 @@ static int32_t SimSensorsInitialize(void)
 	PIOS_SENSORS_Register(PIOS_SENSOR_MAG, (struct pios_queue*)1);
 	PIOS_SENSORS_Register(PIOS_SENSOR_BARO, (struct pios_queue*)1);
 
+#ifdef PIOS_INCLUDE_SIMSENSORS_YASIM
 	if (use_yasim) {
 		sens_rate = 200;
 	}
+#endif
 
 	PIOS_SENSORS_SetSampleRate(PIOS_SENSOR_ACCEL, sens_rate);
 	PIOS_SENSORS_SetSampleRate(PIOS_SENSOR_GYRO, sens_rate);
@@ -206,14 +212,17 @@ static void SensorsTask(void *parameters)
 				break;
 		}
 
+#ifdef PIOS_INCLUDE_SIMSENSORS_YASIM
 		if (use_yasim) {
 			sensor_sim_type = MODEL_YASIM;
 		}
+#endif
 
 		sensors_count++;
 
 		switch(sensor_sim_type) {
 			case MODEL_QUADCOPTER:
+			default:
 				simulateModelQuadcopter();
 				break;
 			case MODEL_AIRPLANE:
@@ -222,9 +231,11 @@ static void SensorsTask(void *parameters)
 			case MODEL_CAR:
 				simulateModelCar();
 				break;
+#ifdef PIOS_INCLUDE_SIMSENSORS_YASIM
 			case MODEL_YASIM:
 				simulateYasim();
 				break;
+#endif
 		}
 
 		static uint32_t tm = 0;
@@ -233,9 +244,9 @@ static void SensorsTask(void *parameters)
 	}
 }
 
+#ifdef PIOS_INCLUDE_SIMSENSORS_YASIM
 static void simulateYasim()
 {
-#if !(defined(_WIN32) || defined(WIN32) || defined(__MINGW32__))
 	const float GYRO_NOISE_SCALE = 1.0f;
 	const float MAG_PERIOD = 1.0 / 75.0;
 	const float BARO_PERIOD = 1.0 / 20.0;
@@ -474,9 +485,8 @@ static void simulateYasim()
 	attitudeSimulated.Velocity[2] = vel[2];
 #endif
 	AttitudeSimulatedSet(&attitudeSimulated);
-
-#endif /* !(defined(_WIN32) || defined(WIN32) || defined(__MINGW32__)) */
 }
+#endif /* PIOS_INCLUDE_SIMSENSORS_YASIM */
 
 static void simulateModelQuadcopter()
 {
@@ -1270,6 +1280,8 @@ static void magOffsetEstimation(MagnetometerData *mag)
 		MagBiasSet(&magBias);
 	}
 }
+
+#endif /* PIOS_INCLUDE_SIMSENSORS */
 
 /**
   * @}
