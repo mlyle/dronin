@@ -228,7 +228,7 @@ static void simsensors_scale_controls(float *rpy, float *thrust_out,
 	ActuatorDesiredData actuatorDesired;
 	ActuatorDesiredGet(&actuatorDesired);
 
-	float thrust = (flightStatus.Armed == FLIGHTSTATUS_ARMED_ARMED) ? actuatorDesired.Thrust * max_thrust : 0;
+	float thrust = actuatorDesired.Thrust * max_thrust;
 	if (thrust < 0)
 		thrust = 0;
 
@@ -238,6 +238,11 @@ static void simsensors_scale_controls(float *rpy, float *thrust_out,
 	*thrust_out = thrust;
 
 	float control_scaling = 3000.0f;
+
+	if (flightStatus.Armed != FLIGHTSTATUS_ARMED_ARMED) {
+		control_scaling = 0;
+		thrust = 0;
+	}
 
 	// In deg/s
 	rpy[0] = control_scaling * actuatorDesired.Roll * (1 - ACTUATOR_ALPHA) + rpy[0] * ACTUATOR_ALPHA;
