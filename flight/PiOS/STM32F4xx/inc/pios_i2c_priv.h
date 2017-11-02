@@ -131,8 +131,10 @@ struct pios_i2c_adapter {
 	enum pios_i2c_adapter_magic         magic;
 	const struct pios_i2c_adapter_cfg * cfg;
 
-	struct pios_mutex *lock;
+	struct pios_semaphore *lock;
 	struct pios_semaphore *sem_ready;
+
+	uint32_t transfer_start;
 
 	bool bus_error;
 	bool nack;
