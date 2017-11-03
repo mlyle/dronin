@@ -190,35 +190,6 @@ static int32_t PIOS_MS5611_ReleaseDevice(void)
 }
 
 /**
-* Start the ADC conversion
-* \param[in] PRESSURE_CONV or TEMPERATURE_CONV to select which measurement to make
-* \return 0 for success, -1 for failure (conversion completed and not read)
-*/
-static int32_t PIOS_MS5611_StartADC(enum conversion_type type)
-{
-	if (PIOS_MS5611_Validate(dev) != 0)
-		return -1;
-
-	/* Start the conversion */
-	switch (type) {
-	case TEMPERATURE_CONV:
-		while (PIOS_MS5611_WriteCommand(MS5611_TEMP_ADDR + dev->cfg->oversampling) != 0)
-			continue;
-		break;
-	case PRESSURE_CONV:
-		while (PIOS_MS5611_WriteCommand(MS5611_PRES_ADDR + dev->cfg->oversampling) != 0)
-			continue;
-		break;
-	default:
-		return -1;
-	}
-
-	dev->current_conversion_type = type;
-
-	return 0;
-}
-
-/**
  * @brief Return the delay for the current osr
  */
 static int32_t PIOS_MS5611_GetDelay()
@@ -243,26 +214,86 @@ static int32_t PIOS_MS5611_GetDelay()
 	return 10;
 }
 
+int PIOS_MS5611_I2CSampleTxn(uint8_t *data, int len,
+		enum conversion_type next_type)
+{
+	uint8_t command;
+	uint8_t address = MS5611_ADC_READ;
+
+	const struct pios_i2c_txn txn_list[] = {
+		{
+			.info = __func__,
+			.addr = ms5611_i2c_addr,
+			.rw = PIOS_I2C_TXN_WRITE,
+			.len = 1,
+			.buf = &address,
+		},
+		{
+			.info = __func__,
+			.addr = ms5611_i2c_addr,
+			.rw = PIOS_I2C_TXN_READ,
+			.len = len,
+			.buf = data,
+		},
+		{
+			.info = __func__,
+			.addr = ms5611_i2c_addr,
+			.rw = PIOS_I2C_TXN_WRITE,
+			.len = 1,
+			.buf = &command,
+		 },
+	};
+
+	/* Start the conversion */
+	switch (next_type) {
+	default:
+	case TEMPERATURE_CONV:
+		command = MS5611_TEMP_ADDR + dev->cfg->oversampling;
+		dev->current_conversion_type = TEMPERATURE_CONV;
+		break;
+	case PRESSURE_CONV:
+		command = MS5611_PRES_ADDR + dev->cfg->oversampling;
+		dev->current_conversion_type = PRESSURE_CONV;
+		break;
+	}
+
+	int ret = PIOS_I2C_TransferAsync(dev->i2c_id, txn_list,
+			NELEMENTS(txn_list), false);
+
+	if (ret) return ret;
+
+	bool completed = false;
+
+	ret = PIOS_I2C_WaitAsync(dev->i2c_id, 0xfffffff, &completed);
+
+	PIOS_Assert(completed);
+
+	return ret;
+}
+
 /**
 * Read the ADC conversion value (once ADC conversion has completed)
 * \return 0 if successfully read the ADC, -1 if failed
 */
-static int32_t PIOS_MS5611_ReadADC(void)
+static int32_t PIOS_MS5611_ReadADC(enum conversion_type next_conv)
 {
 	if (PIOS_MS5611_Validate(dev) != 0)
 		return -1;
 
 	uint8_t data[3];
 
+	enum conversion_type this_conv = dev->current_conversion_type;
+
+	if (PIOS_MS5611_I2CSampleTxn(data, sizeof(data), next_conv)) {
+		return -1;
+	}
+
 	static int64_t delta_temp;
 	static int64_t temperature;
 
 	/* Read and store the 16bit result */
-	if (dev->current_conversion_type == TEMPERATURE_CONV) {
+	if (this_conv == TEMPERATURE_CONV) {
 		uint32_t raw_temperature;
-		/* Read the temperature conversion */
-		if (PIOS_MS5611_Read(MS5611_ADC_READ, data, 3) != 0)
-			return -1;
 
 		raw_temperature = (data[0] << 16) | (data[1] << 8) | data[2];
 
@@ -274,14 +305,10 @@ static int32_t PIOS_MS5611_ReadADC(void)
 		if (temperature < 2000)
 			dev->temperature_unscaled -= (delta_temp * delta_temp) >> 31;
 
-	} else if (dev->current_conversion_type == PRESSURE_CONV) {
+	} else if (this_conv == PRESSURE_CONV) {
 		int64_t offset;
 		int64_t sens;
 		uint32_t raw_pressure;
-
-		/* Read the pressure conversion */
-		if (PIOS_MS5611_Read(MS5611_ADC_READ, data, 3) != 0)
-			return -1;
 
 		raw_pressure = (data[0] << 16) | (data[1] << 8) | (data[2] << 0);
 
@@ -377,21 +404,19 @@ static bool PIOS_MS5611_Callback(void *ctx, void *output,
 
 	PIOS_MS5611_ClaimDevice();
 
-	read_adc_result = PIOS_MS5611_ReadADC();
-
 	dev->interleave_count--;
 
+	enum conversion_type next_conv = PRESSURE_CONV;
+
 	if (dev->interleave_count <= 0) {
-		// Fetch the temperature data
-		PIOS_MS5611_StartADC(TEMPERATURE_CONV);
+		next_conv = TEMPERATURE_CONV;
 
 		dev->interleave_count = dev->cfg->temperature_interleaving + 1;
 		if (dev->interleave_count == 1)
 			dev->interleave_count = 2;
-	} else {
-		// Update the pressure data
-		PIOS_MS5611_StartADC(PRESSURE_CONV);
 	}
+
+	read_adc_result = PIOS_MS5611_ReadADC(next_conv);
 
 	PIOS_MS5611_ReleaseDevice();
 

@@ -56,7 +56,15 @@ struct hmc5883_dev {
 	struct pios_semaphore *data_ready_sema;
 	enum pios_hmc5883_dev_magic magic;
 	enum pios_hmc5883_orientation orientation;
+
+	bool txn_in_progress;
+
+	uint8_t buffer_write[2];
+	uint8_t buffer_read[6];
+	struct pios_i2c_txn txn_list[3];
 };
+
+static const uint8_t addr_read = PIOS_HMC5883_DATAOUT_XMSB_REG;
 
 /* Local Variables */
 static int32_t PIOS_HMC5883_Config(const struct pios_hmc5883_cfg * cfg);
@@ -74,10 +82,12 @@ static struct hmc5883_dev * PIOS_HMC5883_alloc(void)
 {
 	struct hmc5883_dev *hmc5883_dev;
 	
-	hmc5883_dev = (struct hmc5883_dev *)PIOS_malloc(sizeof(*hmc5883_dev));
-	if (!hmc5883_dev) return (NULL);
-	
-	hmc5883_dev->magic = PIOS_HMC5883_DEV_MAGIC;
+	hmc5883_dev = PIOS_malloc(sizeof(*hmc5883_dev));
+	if (!hmc5883_dev) return NULL;
+
+	*hmc5883_dev = (struct hmc5883_dev) {
+		.magic = PIOS_HMC5883_DEV_MAGIC
+	};
 
 	return hmc5883_dev;
 }
@@ -150,6 +160,31 @@ int32_t PIOS_HMC5883_Init(pios_i2c_t i2c_id, const struct pios_hmc5883_cfg *cfg)
 		dev->sample_delay = 1000 / 75.0f + 0.99999f;
 		break;
 	}
+
+	dev->txn_list[0] = (struct pios_i2c_txn) {
+			.info = __func__,
+			.addr = PIOS_HMC5883_I2C_ADDR,
+			.rw = PIOS_I2C_TXN_WRITE,
+			.len = sizeof(addr_read),
+			.buf = (uint8_t *) (&addr_read),
+	};
+	dev->txn_list[1] = (struct pios_i2c_txn) {
+			.info = __func__,
+			.addr = PIOS_HMC5883_I2C_ADDR,
+			.rw = PIOS_I2C_TXN_READ,
+			.len = sizeof(dev->buffer_read),
+			.buf = dev->buffer_read,
+	};
+	dev->txn_list[2] = (struct pios_i2c_txn) {
+			.info = __func__,
+			.addr = PIOS_HMC5883_I2C_ADDR,
+			.rw = PIOS_I2C_TXN_WRITE,
+			.len = sizeof(dev->buffer_write),
+			.buf = dev->buffer_write,
+	};
+
+	dev->buffer_write[0] = PIOS_HMC5883_MODE_REG;
+	dev->buffer_write[1] = dev->cfg->Mode;
 
 	PIOS_SENSORS_RegisterCallback(PIOS_SENSOR_MAG,
 			PIOS_HMC5883_Callback, dev);
@@ -275,56 +310,40 @@ static uint16_t PIOS_HMC5883_Config_GetSensitivity()
 	return 0;
 }
 
-/**
- * @brief Read current X, Z, Y values (in that order)
- * \param[out] int16_t array of size 3 to store X, Z, and Y magnetometer readings
- * \return 0 for success or -1 for failure
- */
-static int32_t PIOS_HMC5883_ReadMag(struct pios_sensor_mag_data *mag_data)
+static int32_t PIOS_HMC5883_BeginTxn()
 {
 	if (PIOS_HMC5883_Validate(dev) != 0)
 		return -1;
 
-	/* don't use PIOS_HMC5883_Read and PIOS_HMC5883_Write here because the task could be
-	 * switched out of context in between which would give the sensor less time to capture
-	 * the next sample.
-	 */
-	uint8_t addr_read = PIOS_HMC5883_DATAOUT_XMSB_REG;
-	uint8_t buffer_read[6];
-
-	// PIOS_HMC5883_MODE_CONTINUOUS: This should not be necessary but for some reason it is coming out of continuous conversion mode
-	// PIOS_HMC5883_MODE_SINGLE: This triggers the next measurement
-	uint8_t buffer_write[2] = {
-		PIOS_HMC5883_MODE_REG,
-		dev->cfg->Mode
-	};
-
-	const struct pios_i2c_txn txn_list[] = {
-		{
-			.info = __func__,
-			.addr = PIOS_HMC5883_I2C_ADDR,
-			.rw = PIOS_I2C_TXN_WRITE,
-			.len = sizeof(addr_read),
-			.buf = &addr_read,
-		},
-		{
-			.info = __func__,
-			.addr = PIOS_HMC5883_I2C_ADDR,
-			.rw = PIOS_I2C_TXN_READ,
-			.len = sizeof(buffer_read),
-			.buf = buffer_read,
-		},
-		{
-			.info = __func__,
-			.addr = PIOS_HMC5883_I2C_ADDR,
-			.rw = PIOS_I2C_TXN_WRITE,
-			.len = sizeof(buffer_write),
-			.buf = buffer_write,
-		},
-	};
-
-	if (PIOS_I2C_Transfer(dev->i2c_id, txn_list, NELEMENTS(txn_list)) != 0)
+	if (PIOS_I2C_TransferAsync(dev->i2c_id, dev->txn_list, 3, false) != 0)
 		return -1;
+
+	dev->txn_in_progress = true;
+
+	return 0;
+}
+
+/**
+ * @brief Read current X, Z, Y values (in that order)
+ * \param[out] int16_t array of size 3 to store X, Z, and Y magnetometer readings
+ * \return 0 for success or nonzero for failure
+ */
+static int32_t PIOS_HMC5883_TryFinishTxn(struct pios_sensor_mag_data *mag_data,
+		int timeout)
+{
+	bool completed;
+
+	int32_t ret = PIOS_I2C_WaitAsync(dev->i2c_id, timeout, &completed);
+
+	if (completed) {
+		dev->txn_in_progress = false;
+	}
+
+	if (ret) {
+		return ret;
+	}
+
+	const uint8_t *buffer_read = dev->buffer_read;
 
 	int16_t mag_x, mag_y, mag_z;
 	uint16_t sensitivity = PIOS_HMC5883_Config_GetSensitivity();
@@ -503,21 +522,35 @@ static bool PIOS_HMC5883_Callback(void *ctx, void *output,
 {
 	PIOS_Assert(!PIOS_HMC5883_Validate(dev));
 
-	if ((dev->data_ready_sema != NULL) && (dev->cfg->Mode == PIOS_HMC5883_MODE_CONTINUOUS)) {
-		*next_call = 0;
+	if (dev->txn_in_progress) {
+		struct pios_sensor_mag_data *mag_data = output;
+		if (PIOS_HMC5883_TryFinishTxn(mag_data, ms_to_wait) != 0) {
+			*next_call = 0;
 
-		if (PIOS_Semaphore_Take(dev->data_ready_sema, ms_to_wait) != true) {
 			return false;
 		}
-	} else {
-		*next_call = dev->sample_delay;
+
+		if ((dev->data_ready_sema != NULL) && (dev->cfg->Mode == PIOS_HMC5883_MODE_CONTINUOUS)) {
+			*next_call = 0;
+		} else {
+			*next_call = dev->sample_delay;
+		}
+
+		return true;
 	}
 
-	struct pios_sensor_mag_data *mag_data = output;
-	if (PIOS_HMC5883_ReadMag(mag_data) != 0)
-		return false;
+	if ((dev->data_ready_sema != NULL) && (dev->cfg->Mode == PIOS_HMC5883_MODE_CONTINUOUS)) {
 
-	return true;
+		if (PIOS_Semaphore_Take(dev->data_ready_sema, ms_to_wait) != true) {
+			*next_call = 0;
+			return false;
+		}
+	}
+
+	PIOS_HMC5883_BeginTxn();
+	*next_call = 0;
+
+	return false;
 }
 
 #endif /* PIOS_INCLUDE_HMC5883 */
