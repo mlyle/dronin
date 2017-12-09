@@ -35,6 +35,21 @@
 
 #include <pios_i2c_priv.h>
 
+#if defined(STM32F30X)
+#define I2C_FLAG_AF I2C_FLAG_NACKF
+#define I2C_FLAG_SMBALERT 0
+
+#define I2C_INTERRUPT_MASK ( I2C_IT_ERRI | I2C_IT_TCI | I2C_IT_NACKI | I2C_IT_RXI | I2C_IT_STOPI | I2C_IT_TXI )
+
+#define I2C_IT_BUF ( I2C_IT_RXNE )
+
+#else
+
+#define I2C_INTERRUPT_MASK ( I2C_IT_EVT | I2C_IT_BUF | I2C_IT_ERR )
+
+#endif
+
+
 static void i2c_adapter_inject_event(struct pios_i2c_adapter *i2c_adapter, enum i2c_adapter_event event, bool *woken);
 static void i2c_adapter_fsm_init(struct pios_i2c_adapter *i2c_adapter);
 static void i2c_adapter_reset_bus(struct pios_i2c_adapter *i2c_adapter);
@@ -319,7 +334,7 @@ static void go_bus_error(struct pios_i2c_adapter *i2c_adapter, bool *woken)
 static void go_stopped(struct pios_i2c_adapter *i2c_adapter, bool *woken)
 {
 	// disable all irqs
-	I2C_ITConfig(i2c_adapter->cfg->regs, I2C_IT_EVT | I2C_IT_BUF | I2C_IT_ERR, DISABLE);
+	I2C_ITConfig(i2c_adapter->cfg->regs, I2C_INTERRUPT_MASK, DISABLE);
 
 	/* wake up blocked PIOS_I2C_Transfer() */
 	PIOS_Semaphore_Give_FromISR(i2c_adapter->sem_ready, woken);
@@ -332,7 +347,7 @@ static void go_starting(struct pios_i2c_adapter *i2c_adapter, bool *woken)
 	i2c_adapter->last_byte = &(i2c_adapter->active_txn->buf[i2c_adapter->active_txn->len - 1]);
 
 	// enabled interrupts
-	I2C_ITConfig(i2c_adapter->cfg->regs, I2C_IT_EVT | I2C_IT_ERR, ENABLE);
+	I2C_ITConfig(i2c_adapter->cfg->regs, I2C_INTERRUPT_MASK, ENABLE);
 
 	// generate a start condition
 	I2C_GenerateSTART(i2c_adapter->cfg->regs, ENABLE);
@@ -682,11 +697,14 @@ static void i2c_adapter_reset_bus(struct pios_i2c_adapter *i2c_adapter)
 
 	/* Initialize the I2C block */
 	I2C_Init(i2c_adapter->cfg->regs, (I2C_InitTypeDef *) & (i2c_adapter->cfg->init));
-
-	if (i2c_adapter->cfg->regs->SR2 & I2C_FLAG_BUSY) {
+	if (I2C_GetFlagStatus(i2c_adapter->cfg->regs, I2C_FLAG_BUSY) == SET) {
 		/* Reset the I2C block */
+#if defined(STM32F30X)
+		I2C_SoftwareResetCmd(i2c_adapter->cfg->regs);
+#else
 		I2C_SoftwareResetCmd(i2c_adapter->cfg->regs, ENABLE);
 		I2C_SoftwareResetCmd(i2c_adapter->cfg->regs, DISABLE);
+#endif
 	}
 }
 
