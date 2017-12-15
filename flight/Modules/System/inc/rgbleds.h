@@ -32,8 +32,16 @@
 
 #include <stdint.h>
 
-void systemmod_process_rgb_leds(bool led_override, bool led_override_active,
-		uint8_t blink_prio, bool is_armed, bool force_dim);
+/**
+ * @brief Controls WS28xx leds based on configuration
+ *
+ * @param[in] led_override Whether "annunciator" ranges have a custom color.
+ * @param[in] alarm_color  The custom color for the annunciator range
+ * @param[in] is_armed     Whether the craft is armed, to show disarmed pattern
+ * @param[in] force_dim    Indicates the light should be dimmer (e.g. on USB power)
+ */
+void systemmod_process_rgb_leds(bool led_override, uint8_t *alarm_color,
+		bool is_armed, bool force_dim);
 
 #endif
 

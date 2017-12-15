@@ -1,7 +1,7 @@
 /**
  ******************************************************************************
  * @file       rgbleds.c
- * @author     dRonin, http://dRonin.org/, Copyright (C) 2016
+ * @author     dRonin, http://dRonin.org/, Copyright (C) 2016-2017
  * @addtogroup Modules Modules
  * @{
  * @addtogroup SystemModule System
@@ -295,8 +295,8 @@ static uint16_t sinusodialize(uint16_t fraction) {
 	return (s + 4096) * 8;
 }
 
-void systemmod_process_rgb_leds(bool led_override, bool led_override_active,
-		uint8_t blink_prio, bool is_armed, bool force_dim) {
+void systemmod_process_rgb_leds(bool led_override, uint8_t *alarm_color,
+		bool is_armed, bool force_dim) {
 	if (!pios_ws2811) return;
 
 	uint16_t num_leds = PIOS_WS2811_get_num_leds(pios_ws2811);
@@ -442,26 +442,6 @@ void systemmod_process_rgb_leds(bool led_override, bool led_override_active,
 					range_color,
 					fraction);
 			break;
-	}
-
-	uint8_t alarm_color[3] = { 0, 0, 0 };
-
-	if (led_override && led_override_active) {
-		// pick a meaningful color based on prio
-	
-		if (blink_prio >= SYSTEMALARMS_ALARM_CRITICAL) {
-			alarm_color[0] = 255; // RED
-			alarm_color[1] = 32;
-			alarm_color[2] = 32;
-		} else if (blink_prio >= SYSTEMALARMS_ALARM_WARNING) {
-			alarm_color[0] = 255; // YELLOW
-			alarm_color[1] = 200;
-			alarm_color[2] = 32;
-		} else {
-			alarm_color[0] = 32; // GREEN
-			alarm_color[1] = 200;
-			alarm_color[2] = 32;
-		}
 	}
 
 	if (force_dim) {

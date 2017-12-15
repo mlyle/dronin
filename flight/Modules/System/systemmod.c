@@ -8,7 +8,7 @@
  * @file       systemmod.c
  * @author     The OpenPilot Team, http://www.openpilot.org Copyright (C) 2010.
  * @author     Tau Labs, http://taulabs.org, Copyright (C) 2013-2015
- * @author     dRonin, http://dronin.org Copyright (C) 2015-2016
+ * @author     dRonin, http://dronin.org Copyright (C) 2015-2017
  * @brief      System module
  *
  * @see        The GNU Public License (GPL) Version 3
@@ -601,7 +601,25 @@ static void systemPeriodicCb(UAVObjEvent *ev, void *ctx, void *obj_data, int len
 	}
 
 #ifdef SYSTEMMOD_RGBLED_SUPPORT
-	systemmod_process_rgb_leds(led_override, morse > 0, blink_prio,
+	uint8_t alarm_color[3];
+
+	if (morse > 0) {
+		if (blink_prio >= SYSTEMALARMS_ALARM_CRITICAL) {
+			alarm_color[0] = 255; // RED
+			alarm_color[1] = 32;
+			alarm_color[2] = 32;
+		} else if (blink_prio >= SYSTEMALARMS_ALARM_WARNING) {
+			alarm_color[0] = 255; // YELLOW
+			alarm_color[1] = 200;
+			alarm_color[2] = 32;
+		} else {
+			alarm_color[0] = 32; // GREEN
+			alarm_color[1] = 200;
+			alarm_color[2] = 32;
+		}
+	}
+
+	systemmod_process_rgb_leds(led_override, alarm_color,
 		FLIGHTSTATUS_ARMED_DISARMED != armed_status,
 		(FLIGHTSTATUS_ARMED_ARMING == armed_status) &&
 		((counter & 3) < 2));
