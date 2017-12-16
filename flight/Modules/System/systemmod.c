@@ -139,6 +139,7 @@ static struct pios_queue *objectPersistenceQueue;
 
 static volatile bool config_check_needed;
 static const char * volatile custom_blink_string;
+static uint8_t volatile custom_blink_color[3];
 
 // Private functions
 static void systemPeriodicCb(UAVObjEvent *ev, void *ctx, void *obj_data, int len);
@@ -398,8 +399,19 @@ static inline void consider_annunc(AnnunciatorSettingsData *annunciatorSettings,
 }
 #endif
 
-void system_annunc_custom_string(const char *string)
+void system_annunc_custom_string(const char *string, uint8_t *color)
 {
+	if (color) {
+		custom_blink_color[0] = color[0];
+		custom_blink_color[1] = color[1];
+		custom_blink_color[2] = color[2];
+	} else {
+		/* Bright red! */
+		custom_blink_color[0] = 255;
+		custom_blink_color[1] = 24;
+		custom_blink_color[2] = 32;
+	}
+
 	custom_blink_string = string;
 }
 
@@ -461,6 +473,10 @@ static void systemPeriodicCb(UAVObjEvent *ev, void *ctx, void *obj_data, int len
 	static bool led_override = false;
 #endif
 
+#ifdef SYSTEMMOD_RGBLED_SUPPORT
+	static uint8_t alarm_color[3];
+#endif
+
 	// Evaluate all our possible annunciator sources.
 
 	// The most important: indicate_error / alarms
@@ -493,6 +509,20 @@ static void systemPeriodicCb(UAVObjEvent *ev, void *ctx, void *obj_data, int len
 				is_manual_control = true;
 			} else {
 				is_manual_control = false;
+			}
+
+			if (blink_prio >= SYSTEMALARMS_ALARM_CRITICAL) {
+				alarm_color[0] = 255; // RED
+				alarm_color[1] = 32;
+				alarm_color[2] = 32;
+			} else if (blink_prio >= SYSTEMALARMS_ALARM_WARNING) {
+				alarm_color[0] = 255; // YELLOW
+				alarm_color[1] = 200;
+				alarm_color[2] = 32;
+			} else {
+				alarm_color[0] = 32; // GREEN
+				alarm_color[1] = 200;
+				alarm_color[2] = 32;
 			}
 		}
 
@@ -601,24 +631,6 @@ static void systemPeriodicCb(UAVObjEvent *ev, void *ctx, void *obj_data, int len
 	}
 
 #ifdef SYSTEMMOD_RGBLED_SUPPORT
-	uint8_t alarm_color[3];
-
-	if (morse > 0) {
-		if (blink_prio >= SYSTEMALARMS_ALARM_CRITICAL) {
-			alarm_color[0] = 255; // RED
-			alarm_color[1] = 32;
-			alarm_color[2] = 32;
-		} else if (blink_prio >= SYSTEMALARMS_ALARM_WARNING) {
-			alarm_color[0] = 255; // YELLOW
-			alarm_color[1] = 200;
-			alarm_color[2] = 32;
-		} else {
-			alarm_color[0] = 32; // GREEN
-			alarm_color[1] = 200;
-			alarm_color[2] = 32;
-		}
-	}
-
 	systemmod_process_rgb_leds(led_override, alarm_color,
 		FLIGHTSTATUS_ARMED_DISARMED != armed_status,
 		(FLIGHTSTATUS_ARMED_ARMING == armed_status) &&

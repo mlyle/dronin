@@ -67,7 +67,7 @@ extern volatile enum actuator_interlock actuator_interlock;
 
 extern int actuator_send_dshot_command(uint8_t cmd_id, uint8_t num_to_send,
                 uint16_t channel_mask);
-extern void system_annunc_custom_string(const char *string);
+extern void system_annunc_custom_string(const char *string, uint8_t *color);
 
 #endif // PIOS_MODULES_H_
 
