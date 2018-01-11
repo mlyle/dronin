@@ -572,7 +572,7 @@ static void telemetryTxTask(void *parameters)
 		UAVObjEvent ev;
 
 		// Wait for queue message
-		if (PIOS_Queue_Receive(telem->queue,&ev,
+		if (PIOS_Queue_Receive(telem->queue, &ev,
 					PIOS_QUEUE_TIMEOUT_MAX) == true) {
 			// Process event
 			processObjEvent(telem, &ev);
