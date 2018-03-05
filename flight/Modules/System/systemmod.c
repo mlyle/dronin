@@ -422,7 +422,6 @@ static void systemPeriodicCb(UAVObjEvent *ev, void *ctx, void *obj_data, int len
 #endif
 
 	if (fourth) {
-		// Update the modem status, if present
 #ifndef PIPXTREME
 		// Update the system statistics
 		updateStats();
@@ -616,8 +615,6 @@ static void objectUpdatedCb(UAVObjEvent * ev, void *ctx, void *obj_data, int len
 {
 	(void) ctx; (void) obj_data; (void) len;
 
-	/* Handled in RadioComBridge on pipxtreme. */
-#ifndef PIPXTREME
 	ObjectPersistenceData objper;
 	UAVObjHandle obj;
 
@@ -679,7 +676,6 @@ static void objectUpdatedCb(UAVObjEvent * ev, void *ctx, void *obj_data, int len
 				break;
 		}
 	}
-#endif
 }
 
 #ifndef NO_SENSORS
