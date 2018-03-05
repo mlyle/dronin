@@ -39,9 +39,6 @@
 #include "GPS.h"
 
 //#define ENABLE_DEBUG_MSG						///< define to enable debug-messages
-#define DEBUG_PORT		PIOS_COM_TELEM_RF		///< defines which serial port is ued for debug-messages
-
-
 
 // Debugging
 #ifdef ENABLE_DEBUG_MSG
@@ -55,7 +52,7 @@
 //#define NMEA_DEBUG_GSA		///< define to enable debug of GSA messages
 //#define NMEA_DEBUG_GSV		///< define to enable debug of GSV messages
 //#define NMEA_DEBUG_ZDA		///< define to enable debug of ZDA messages
-#define DEBUG_MSG(format, ...) PIOS_COM_SendFormattedString(DEBUG_PORT, format, ## __VA_ARGS__)
+#define DEBUG_MSG(format, ...) PIOS_COM_SendFormattedString(PIOS_COM_DEBUG, format, ## __VA_ARGS__)
 #else
 #define DEBUG_MSG(format, ...)
 #endif
