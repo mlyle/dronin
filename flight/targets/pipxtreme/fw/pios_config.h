@@ -35,10 +35,8 @@
 #define PIOS_INCLUDE_ANNUNC
 #define PIOS_INCLUDE_RCVR
 #define PIOS_INCLUDE_TIM
-#if 0
 #define PIOS_INCLUDE_OPENLRS
 #define PIOS_INCLUDE_OPENLRS_RCVR
-#endif
 
 /* Supported receiver interfaces */
 #define PIOS_INCLUDE_PPM

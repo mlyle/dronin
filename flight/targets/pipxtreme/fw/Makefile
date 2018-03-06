@@ -55,9 +55,9 @@ USE_GPS ?= NO
 USE_I2C ?= YES
 
 # List of modules to include
-MODULES += ComUsbBridge
+#MODULES += ComUsbBridge
 #MODULES += Telemetry
-#MODULES += RadioComBridge
+MODULES += RadioComBridge
 #MODULES += UAVOTaranis
 
 # Paths

@@ -216,7 +216,7 @@ int32_t SystemModInitialize(void)
 	return 0;
 }
 
-MODULE_HIPRI_INITCALL(SystemModInitialize, SystemModStart)
+//MODULE_HIPRI_INITCALL(SystemModInitialize, SystemModStart)
 static void systemTask(void *parameters)
 {
 	if (PIOS_heap_malloc_failed_p()) {
