@@ -34,8 +34,6 @@
 /* Major features */
 
 /* Enable/Disable PiOS Modules */
-#define PIOS_INCLUDE_DMA_CB_SUBSCRIBING_FUNCTION
-
 #define PIOS_INCLUDE_SPI
 #define PIOS_INCLUDE_I2C
 

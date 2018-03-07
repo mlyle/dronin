@@ -34,8 +34,6 @@
 #include "pios.h"
 #include "pios_ws2811.h"
 
-#include "pios_dma.h"
-
 #define WS2811_BITS_PER_LED        24
 // for 50us delay
 #define WS2811_DELAY_BUFFER_LENGTH 42

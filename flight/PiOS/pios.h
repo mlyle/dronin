@@ -98,9 +98,6 @@
 #include <pios_pwm.h>
 #include <pios_rcvr.h>
 #include <pios_reset.h>
-#if defined(PIOS_INCLUDE_DMA_CB_SUBSCRIBING_FUNCTION)
-#include <pios_dma.h>
-#endif
 #if defined(PIOS_INCLUDE_RTOS)
 #include <pios_sensors.h>
 #endif

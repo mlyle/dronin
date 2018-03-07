@@ -46,11 +46,6 @@ const struct pios_adc_driver pios_internal_adc_driver = {
 		.lsb_voltage = PIOS_INTERNAL_ADC_LSB_Voltage,
 };
 
-static void PIOS_INTERNAL_ADC_DMA_Handler1(void);
-static void PIOS_INTERNAL_ADC_DMA_Handler2(void);
-static void PIOS_INTERNAL_ADC_DMA_Handler3(void);
-static void PIOS_INTERNAL_ADC_DMA_Handler4(void);
-
 // Private types
 enum pios_internal_adc_dev_magic {
 	PIOS_INTERNAL_ADC_DEV_MAGIC = 0x58375124,
@@ -60,9 +55,6 @@ struct adc_accumulator {
 	uint32_t accumulator;
 	uint32_t count;
 };
-
-struct pios_internal_adc_dev * driver_instances[PIOS_INTERNAL_ADC_MAX_INSTANCES];
-static uint8_t current_instances = 0;
 
 struct pios_internal_adc_dev {
 	const struct pios_internal_adc_cfg * cfg;
@@ -78,7 +70,6 @@ struct pios_internal_adc_dev {
 	uint32_t accumulator_scan_size;
 	enum pios_internal_adc_dev_magic magic;
 };
-static void PIOS_ADC_DMA_Handler(struct pios_internal_adc_dev *);
 
 /**
  * @brief Validates an internal ADC device
@@ -140,23 +131,6 @@ static void PIOS_INTERNAL_DMAConfig(uintptr_t internal_adc_id)
 	/* Disable interrupts */
 	DMA_ITConfig(adc_dev->cfg->dma.rx.channel, adc_dev->cfg->dma.irq.flags, DISABLE);
 
-	switch (current_instances) {
-	case 1:
-		PIOS_DMA_Install_Interrupt_handler(adc_dev->cfg->dma.rx.channel, &PIOS_INTERNAL_ADC_DMA_Handler1);
-		break;
-	case 2:
-		PIOS_DMA_Install_Interrupt_handler(adc_dev->cfg->dma.rx.channel, &PIOS_INTERNAL_ADC_DMA_Handler2);
-		break;
-	case 3:
-		PIOS_DMA_Install_Interrupt_handler(adc_dev->cfg->dma.rx.channel, &PIOS_INTERNAL_ADC_DMA_Handler3);
-		break;
-	case 4:
-		PIOS_DMA_Install_Interrupt_handler(adc_dev->cfg->dma.rx.channel, &PIOS_INTERNAL_ADC_DMA_Handler4);
-		break;
-	default:
-		break;
-	}
-
 	/* Configure DMA channel */
 	DMA_DeInit(adc_dev->cfg->dma.rx.channel);
 	DMA_InitTypeDef DMAInit = adc_dev->cfg->dma.rx.init;
@@ -197,6 +171,7 @@ static void PIOS_INTERNAL_DMAConfig(uintptr_t internal_adc_id)
 	NVIC_InitTypeDef NVICInit = adc_dev->cfg->dma.irq.init;
 	NVIC_Init(&NVICInit);
 }
+
 /**
  * @brief Configures the ADC device
  * \param[in] handle to the ADC device
@@ -342,7 +317,7 @@ static void PIOS_INTERNAL_ADC_Converter_Config(uintptr_t internal_adc_id)
 /**
  * @brief Init the ADC.
  */
-int32_t PIOS_INTERNAL_ADC_Init(uintptr_t * internal_adc_id, const struct pios_internal_adc_cfg * cfg)
+int32_t PIOS_INTERNAL_ADC_Init(uintptr_t *internal_adc_id, const struct pios_internal_adc_cfg * cfg)
 {
 	PIOS_DEBUG_Assert(internal_adc_id); PIOS_DEBUG_Assert(cfg);
 
@@ -395,9 +370,6 @@ int32_t PIOS_INTERNAL_ADC_Init(uintptr_t * internal_adc_id, const struct pios_in
 		adc_dev->channel_map = PIOS_malloc(adc_dev->regular_group_size * sizeof(struct adc_accumulator *));
 	if (adc_dev->channel_map == NULL )
 		return -1;
-
-	driver_instances[current_instances] = adc_dev;
-	++current_instances;
 
 	PIOS_INTERNAL_ADC_PinConfig((uintptr_t) adc_dev);
 
@@ -486,35 +458,15 @@ static void accumulate(struct pios_internal_adc_dev *adc_dev, uint16_t *buffer)
 }
 
 /**
- * @brief DMA Interrupt handlers
- */
-static void PIOS_INTERNAL_ADC_DMA_Handler1(void)
-{
-	PIOS_ADC_DMA_Handler(driver_instances[0]);
-}
-
-static void PIOS_INTERNAL_ADC_DMA_Handler2(void)
-{
-	PIOS_ADC_DMA_Handler(driver_instances[1]);
-}
-
-static void PIOS_INTERNAL_ADC_DMA_Handler3(void)
-{
-	PIOS_ADC_DMA_Handler(driver_instances[2]);
-}
-
-static void PIOS_INTERNAL_ADC_DMA_Handler4(void)
-{
-	PIOS_ADC_DMA_Handler(driver_instances[3]);
-}
-
-/**
  * @brief Interrupt on buffer flip.
  *
  * The hardware is done with the 'other' buffer, so we can pass it to the accumulator.
  */
-static void PIOS_ADC_DMA_Handler(struct pios_internal_adc_dev *adc_dev)
+
+void PIOS_INTERNAL_ADC_DMA_Handler(uintptr_t dev_id)
 {
+	struct pios_internal_adc_dev *adc_dev = (void *) dev_id;
+
 	if (!PIOS_INTERNAL_ADC_validate(adc_dev))
 		PIOS_Assert(0);
 	/* terminal count, buffer has flipped */
