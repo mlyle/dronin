@@ -434,6 +434,7 @@ static void systemPeriodicCb(UAVObjEvent *ev, void *ctx, void *obj_data, int len
 #ifndef PIPXTREME
 		// Update the system alarms
 		updateSystemAlarms();
+#endif /* PIPXTREME */
 
 #if defined(WDG_STATS_DIAGNOSTICS)
 		updateWDGstats();
@@ -443,8 +444,6 @@ static void systemPeriodicCb(UAVObjEvent *ev, void *ctx, void *obj_data, int len
 		// Update the task status object
 		TaskMonitorUpdateAll();
 #endif
-
-#endif /* PIPXTREME */
 	}
 
 #if defined(PIOS_INCLUDE_ANNUNC)
