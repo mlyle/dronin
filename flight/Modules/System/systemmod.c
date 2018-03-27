@@ -175,6 +175,10 @@ int32_t SystemModStart(void)
 	// Register task
 	TaskMonitorAdd(TASKINFO_RUNNING_SYSTEM, systemTaskHandle);
 
+#if defined(PIOS_INCLUDE_WDG) && defined(PIOS_WDG_SYSTEM)
+	PIOS_WDG_RegisterFlag(PIOS_WDG_SYSTEM);
+#endif
+
 	return 0;
 }
 
@@ -256,6 +260,10 @@ static void systemTask(void *parameters)
 
 	// Main system loop
 	while (1) {
+#if defined(PIOS_INCLUDE_WDG) && defined(PIOS_WDG_SYSTEM)
+		PIOS_WDG_UpdateFlag(PIOS_WDG_SYSTEM);
+#endif
+
 		int32_t delayTime = processPeriodicUpdates();
 
 		UAVObjEvent ev;
