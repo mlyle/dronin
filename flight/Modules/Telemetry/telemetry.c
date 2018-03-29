@@ -1001,6 +1001,14 @@ extern void telemetry_set_inhibit(bool inhibit)
 
 			while (!telem_state.rx_inhibited);
 			while (!telem_state.tx_inhibited);
+
+			/* Null out session so that we can "come back"
+			 * and renegotiate session
+			 */
+			SessionManagingData sessionManaging;
+			SessionManagingGet(&sessionManaging);
+			sessionManaging.SessionID = 0;
+			SessionManagingSet(&sessionManaging);
 		}
 	} else {
 		if (telem_state.request_inhibit) {
