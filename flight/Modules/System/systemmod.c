@@ -285,8 +285,8 @@ static void systemTask(void *parameters)
 static inline uint8_t indicate_error(const char **sequence)
 {
 #ifdef PIPXTREME
-	*sequence="q";
-	return SYSTEMALARMS_ALARM_CRITICAL;
+	*sequence="t";	/* Dashes */
+	return SYSTEMALARMS_ALARM_WARNING;
 #else
 
 	SystemAlarmsData alarms;
