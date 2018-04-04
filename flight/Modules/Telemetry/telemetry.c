@@ -103,6 +103,9 @@ struct telemetry_state {
 
 	struct pios_mutex *reqack_mutex;
 
+	struct pios_semaphore *access_sem;
+	volatile bool request_inhibit, tx_inhibited, rx_inhibited;
+
 	UAVTalkConnection uavTalkCon;
 };
 
@@ -597,6 +600,8 @@ static void processObjEvent(telem_t telem, UAVObjEvent * ev)
 					EV_NONE);
 		}
 	}
+
+	UAVObjUnblockThrottle(ev->throttle);
 }
 
 static void sendRequestedObjs(telem_t telem)
@@ -654,6 +659,14 @@ static void telemetryTxTask(void *parameters)
 		UAVObjEvent ev;
 
 		bool retval;
+
+		if (telem->request_inhibit) {
+			telem->tx_inhibited = true;
+			PIOS_Thread_Sleep(3);
+			continue;
+		}
+
+		telem->tx_inhibited = false;
 
 		// Wait for queue message or short timeout
 		retval = PIOS_Queue_Receive(telem->queue, &ev, 50);
@@ -731,12 +744,14 @@ static void telemetryRxTask(void *parameters)
 	while (1) {
 		uintptr_t inputPort = getComPort();
 
-		if (inputPort) {
+		if (inputPort && (!telem->request_inhibit)) {
 			// Block until data are available
 			uint8_t serial_data[16];
 			uint16_t bytes_to_process;
 
-			bytes_to_process = PIOS_COM_ReceiveBuffer(inputPort, serial_data, sizeof(serial_data), 500);
+			telem->rx_inhibited = false;
+
+			bytes_to_process = PIOS_COM_ReceiveBuffer(inputPort, serial_data, sizeof(serial_data), 100);
 
 			if (bytes_to_process > 0) {
 				UAVTalkProcessInputStream(telem->uavTalkCon, serial_data, bytes_to_process);
@@ -748,6 +763,7 @@ static void telemetryRxTask(void *parameters)
 #endif
 			}
 		} else {
+			telem->rx_inhibited = true;
 			PIOS_Thread_Sleep(3);
 		}
 	}
@@ -798,6 +814,7 @@ static int32_t setUpdatePeriod(telem_t telem, UAVObjHandle obj,
  */
 static void gcsTelemetryStatsUpdated(telem_t telem)
 {
+	// XXX this is dumb.
 	FlightTelemetryStatsData flightStats;
 	GCSTelemetryStatsData gcsStats;
 	FlightTelemetryStatsGet(&flightStats);
@@ -883,12 +900,14 @@ static void updateTelemetryStats(telem_t telem)
 		flightStats.Status = FLIGHTTELEMETRYSTATS_STATUS_DISCONNECTED;
 	}
 
+#ifndef PIPXTREME
 	// Update the telemetry alarm
 	if (flightStats.Status == FLIGHTTELEMETRYSTATS_STATUS_CONNECTED) {
 		AlarmsClear(SYSTEMALARMS_ALARM_TELEMETRY);
 	} else {
 		AlarmsSet(SYSTEMALARMS_ALARM_TELEMETRY, SYSTEMALARMS_ALARM_ERROR);
 	}
+#endif
 
 	// Update object
 	FlightTelemetryStatsSet(&flightStats);
@@ -904,12 +923,12 @@ static void updateTelemetryStats(telem_t telem)
  */
 static void updateSettings()
 {
-	if (PIOS_COM_TELEM_RF) {
+	if (PIOS_COM_TELEM_SER) {
 		// Retrieve settings
 		uint8_t speed;
 		ModuleSettingsTelemetrySpeedGet(&speed);
 
-		PIOS_HAL_ConfigureSerialSpeed(PIOS_COM_TELEM_RF, speed);
+		PIOS_HAL_ConfigureSerialSpeed(PIOS_COM_TELEM_SER, speed);
 	}
 }
 
@@ -932,8 +951,8 @@ static uintptr_t getComPort()
 	}
 #endif /* PIOS_COM_TELEM_USB */
 
-	if (PIOS_COM_Available(PIOS_COM_TELEM_RF) )
-		return PIOS_COM_TELEM_RF;
+	if (PIOS_COM_Available(PIOS_COM_TELEM_SER))
+		return PIOS_COM_TELEM_SER;
 
 	return 0;
 }
@@ -976,6 +995,33 @@ static void update_object_instances(uint32_t obj_id, uint32_t inst_id)
 	sessionManaging.ObjectInstances = inst_id;
 	sessionManaging.SessionID = sessionManaging.SessionID + 1;
 	SessionManagingSet(&sessionManaging);
+}
+
+extern void telemetry_set_inhibit(bool inhibit)
+{
+	if (inhibit) {
+		if (!telem_state.request_inhibit) {
+			telem_state.request_inhibit = true;
+
+			while (!telem_state.rx_inhibited);
+			while (!telem_state.tx_inhibited);
+
+			/* Null out session so that we can "come back"
+			 * and renegotiate session
+			 */
+			SessionManagingData sessionManaging;
+			SessionManagingGet(&sessionManaging);
+			sessionManaging.SessionID = 0;
+			SessionManagingSet(&sessionManaging);
+		}
+	} else {
+		if (telem_state.request_inhibit) {
+			telem_state.request_inhibit = false;
+
+			while (telem_state.rx_inhibited);
+			while (telem_state.tx_inhibited);
+		}
+	}
 }
 
 /**
