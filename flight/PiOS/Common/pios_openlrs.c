@@ -683,7 +683,16 @@ static void pios_openlrs_config_to_port_config(pios_openlrs_t openlrs_dev)
 				return;
 #endif
 			} else {
+#if defined(PIPXTREME) && defined(PIOS_COM_RADIOBRIDGE)
+				/* Only on pipxtreme, does "uavotelemetry" in
+				 * an RX still mean we use the radio
+				 * combridge.  Otherwise we just hook our
+				 * native telemetry up to the port.
+				 */
+				target = &PIOS_COM_RADIOBRIDGE;
+#else
 				target = &PIOS_COM_TELEM_SER;
+#endif
 			}
 			break;
 		case OPENLRS_DATA_SOURCE_COMBRIDGE:
