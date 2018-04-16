@@ -767,12 +767,6 @@ static void telemetryRxTask(void *parameters)
 
 			if (bytes_to_process > 0) {
 				UAVTalkProcessInputStream(telem->uavTalkCon, serial_data, bytes_to_process);
-
-#if defined(PIOS_COM_TELEM_USB)
-				if (inputPort == PIOS_COM_TELEM_USB) {
-					processUsbActivity(true);
-				}
-#endif
 			}
 		} else {
 			telem->rx_inhibited = true;
