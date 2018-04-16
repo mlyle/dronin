@@ -70,6 +70,7 @@
 #define MAX_RETRIES       2
 #define MAX_PORT_DELAY    200
 #define RETRY_TIMEOUT_MS  150
+#define USB_ACTIVITY_TIMEOUT_MS 6000
 
 // ****************
 // Private types
@@ -114,6 +115,64 @@ static void NewReceiverData(UAVObjEvent * ev, void *ctx, void *obj, int len)
 
 	UAVTalkSendObject(data->telemUAVTalkCon, ev->obj, ev->instId,
 			false);
+}
+
+#if defined(PIOS_COM_TELEM_USB)
+/**
+ * Updates the USB activity timer, and returns whether we should use USB this
+ * time around.
+ * \param[in] seen_active true if we have seen activity on the USB port this time
+ * \return true if we should use usb, false if not.
+ */
+static bool processUsbActivity(bool seen_active)
+{
+	static volatile uint32_t usb_last_active;
+
+	if (seen_active) {
+		usb_last_active = PIOS_Thread_Systime();
+
+		return true;
+	}
+
+	if (usb_last_active) {
+		if (!PIOS_Thread_Period_Elapsed(usb_last_active,
+					USB_ACTIVITY_TIMEOUT_MS)) {
+			return true;
+		} else {
+			/* "Latch" expiration so it doesn't become true
+			 * again.
+			 */
+			usb_last_active = 0;
+		}
+	}
+
+	return false;
+}
+#endif // PIOS_COM_TELEM_USB
+
+/**
+ * Determine input/output com port as highest priority available
+ */
+static uintptr_t getComPort()
+{
+#if defined(PIOS_COM_TELEM_USB)
+	if (PIOS_COM_Available(PIOS_COM_TELEM_USB)) {
+		/* Let's further qualify this.  If there's anything spooled
+		 * up for RX, bump the activity time.
+		 */
+
+		bool rx_pending = PIOS_COM_GetNumReceiveBytesPending(PIOS_COM_TELEM_USB) > 0;
+
+		if (processUsbActivity(rx_pending)) {
+			return PIOS_COM_TELEM_USB;
+		}
+	}
+#endif /* PIOS_COM_TELEM_USB */
+
+	if (PIOS_COM_Available(PIOS_COM_TELEM_SER))
+		return PIOS_COM_TELEM_SER;
+
+	return 0;
 }
 
 /**
@@ -275,7 +334,8 @@ static void telemetryRxTask( __attribute__ ((unused))
 {
 	// Task loop
 	while (1) {
-		uint32_t inputPort = PIOS_COM_TELEM_SER;
+		uint32_t inputPort = getComPort();
+
 #ifdef PIOS_INCLUDE_WDG
 		PIOS_WDG_UpdateFlag(PIOS_WDG_TELEMETRY);
 #endif
@@ -285,12 +345,7 @@ static void telemetryRxTask( __attribute__ ((unused))
 			PIOS_Thread_Sleep(5);
 			continue;
 		}
-#if defined(PIOS_INCLUDE_USB)
-		// Determine output port (USB takes priority over telemetry port)
-		if (PIOS_COM_Available(PIOS_COM_TELEM_USB)) {
-			inputPort = PIOS_COM_TELEM_USB;
-		}
-#endif /* PIOS_INCLUDE_USB */
+
 		if (inputPort) {
 			uint8_t serial_data[32];
 			uint16_t bytes_to_process =
@@ -327,14 +382,7 @@ static int32_t UAVTalkSendHandler(void *ctx, uint8_t * buf, int32_t length)
 	(void) ctx;
 
 	int32_t ret;
-	uint32_t outputPort = PIOS_COM_TELEM_SER;
-
-#if defined(PIOS_INCLUDE_USB)
-	// Determine output port (USB takes priority over telemetry port)
-	if (PIOS_COM_Available(PIOS_COM_TELEM_USB)) {
-		outputPort = PIOS_COM_TELEM_USB;
-	}
-#endif /* PIOS_INCLUDE_USB */
+	uint32_t outputPort = getComPort();
 
 	if (outputPort) {
 		ret = PIOS_COM_SendBufferStallTimeout(outputPort, buf, length,
